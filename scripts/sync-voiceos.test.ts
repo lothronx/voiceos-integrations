@@ -56,3 +56,21 @@ test("reports no change when the cache already matches, so VoiceOS needn't resta
 test("an integration VoiceOS never installed is an error that says what to do", () => {
   expect(() => patchConfig(config(), { ...manifest, id: "com.example.missing" })).toThrow(/not installed in VoiceOS/);
 });
+
+test("--replace re-points an install that Studio generated under another id", () => {
+  const c = config();
+  const renamed = { ...manifest, id: "com.example.ga-v2", name: "GA" };
+  expect(() => patchConfig(c, renamed)).toThrow(/not installed in VoiceOS/);
+  expect(patchConfig(c, renamed, "com.example.ga")).toEqual({ changed: true, dirPath: "/vo/ga-123" });
+  expect(c.installedIntegrations[1].manifest.id).toBe("com.example.ga-v2");
+  // Once re-pointed, the install is found by the new id alone.
+  expect(patchConfig(c, structuredClone(renamed)).changed).toBe(false);
+});
+
+test("the MCP server's integrationId and name follow the manifest when the server has them", () => {
+  const c: any = config();
+  Object.assign(c.customMcpServers[1], { integrationId: "com.example.old", name: "Old" });
+  patchConfig(c, { ...manifest, name: "Google Analytics" });
+  expect(c.customMcpServers[1]).toMatchObject({ integrationId: "com.example.ga", name: "Google Analytics" });
+  expect(c.customMcpServers[0]).not.toHaveProperty("integrationId");
+});
