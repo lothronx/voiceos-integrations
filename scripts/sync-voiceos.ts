@@ -133,16 +133,21 @@ function launchVoiceOS(): void {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   if (IS_WIN) {
-    // `start` detaches it, so VoiceOS outlives this script.
-    Bun.spawnSync(["cmd", "/c", "start", "", findWindowsExe()], { env });
+    // Not spawnSync: VoiceOS inherits the pipes and holds them open, so a
+    // synchronous spawn never returns. Detached, with no pipes, and unref'd so
+    // this script can exit while VoiceOS keeps running.
+    Bun.spawn([findWindowsExe()], { env, stdio: ["ignore", "ignore", "ignore"], detached: true }).unref();
   } else {
     Bun.spawnSync(["open", "-a", "VoiceOS"], { env });
   }
 }
 
 /** Waits up to `ms` for the relaunched VoiceOS to settle with the patch still in place. */
-async function verifyAfterLaunch(manifest: any, replaceId: string | undefined, backup: string, ms = 20000): Promise<void> {
+async function verifyAfterLaunch(manifest: any, replaceId: string | undefined, backup: string, ms = 25000): Promise<void> {
   let last = "";
+  // A read right after launch only sees our own write: VoiceOS hasn't loaded
+  // (or synced) the config yet. Give it time to start before trusting a match.
+  await Bun.sleep(8000);
   for (const deadline = Date.now() + ms; Date.now() < deadline; ) {
     await Bun.sleep(2500);
     try {
